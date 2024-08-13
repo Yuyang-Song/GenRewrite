@@ -33,6 +33,7 @@ class GenRewrite:
 
     def suggest_group_rewrite(self, query, hints):
         
+        
     # done
     def suggest_select_rewrite(self, input_query):
         selector = suggest_select_rewrite(self.json_path)

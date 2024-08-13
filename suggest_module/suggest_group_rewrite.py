@@ -151,13 +151,21 @@ class sugget_group_rewrite:
             json.dump(json_data, file, indent=3)
 
         print(f"Added rule with group_id: {group_id}: {rewrite_rule} to {self.path}")
+    
+    
+    def add_rule_in_group(self,rewrite_rule,query):
+        self.load_json()
+        top_k_sentences = self.knn(rewrite_rule)
+        response = self.predict_group(rewrite_rule, top_k_sentences)['option']
+        group_id = self.hash.get(response)
+        self.add_rule_to_json(group_id,rewrite_rule,query)
 
 
 # 示例使用
-reportory_path = "../data/reportory.json"
-embedding_model = sugget_group_rewrite(reportory_path,k = 3)
-input_sentence = "SELECT * FROM table1 WHERE condition1."
-top_k_sentences = embedding_model.knn(input_sentence)
+# reportory_path = "../data/reportory.json"
+# embedding_model = sugget_group_rewrite(reportory_path,k = 3)
+# embedding_model.add_rule_in_group("SELECT * FROM table1 WHERE condition1.","This is a test query.")
+
 
 # reportory_path = "../data/reportory.json"
 # embedding_model = sugget_group_rewrite(reportory_path,k = 3)

@@ -23,11 +23,11 @@ import configparser
 class GPT:
     # init function to initialize the GPT class using gpt-4o, ignoring the token and money cost termerarily
     def __init__(self):
-        self.base_url = "https://one.aios123.com/v1"
-        self.api_key = "sk-LR70O3o5qf5L9fIo62Da419a4bEd461bA7AcA3D3056a2310"
-        # self.model = "gpt-4o-mini"
+        self.base_url = "your_base_url"
+        self.api_key = "your_api_key"
         self.model = "gpt-4o-mini"
-
+        # self.model = "gpt-3.5-turbo"
+    
     def get_GPT_response(self, prompt,json_format = False):
         client = OpenAI(
             base_url = self.base_url,
@@ -95,7 +95,8 @@ class GPT:
 gpt = GPT()
 prompt = "What is the capital of France?"
 
-response = gpt.get_GPT_response(prompt,json_format=True)
+response = gpt.get_GPT_response(prompt,json_format=False)
+# # response = gpt.get_chat_messages(prompt)
 print(f"{response}")
 
 

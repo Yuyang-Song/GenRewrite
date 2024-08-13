@@ -1,15 +1,24 @@
 # evaluate the optimized SQL queries and provide feedback to the user.
 # quivalence -> slabcity
 # perfermence -> EXPLAIN
+import sys
+import os
+import re
+import textwrap
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 import json
 import time
 import textwrap
 import psycopg2
 from tabulate import tabulate
 import csv
+from pipeline_module.gpt import GPT
 
 class Evaluate_rewrite_model:
     def __init__(self, db_file):
+        self.gpt = GPT()
         self.db_file = db_file
     
     # 连接数据库并返回连接信息
@@ -87,6 +96,30 @@ class Evaluate_rewrite_model:
         conn.close()
         
         return speed_up
+    
+    def check_if_equiv(self,origin_query,rewrite_query):
+        prompt=textwrap.dedent(f"""
+            <description>
+            q1:{origin_query} q2:{rewrite_query}
+            q1 is the original query, q2 is the rewritten query of q1.
+            
+            <target>
+            To give a conclusion that whether q1 and q2 are equivalent or not.
+            If equivalent, please return "Equivalent" and give a brief reason. 
+            If not equivalent, please return "Not Equivalent" and give a brief reason.
+            <demant>
+            JSON RESULT TEMPLATE:
+            {{
+                "Equivalence": , // answer 'Equivalent' or 'Not Equivalent'
+                "Briefly analysis": ,      //briefly show wheather the two queries are equivalent or not
+            }}
+        
+        """)
+        response = self.gpt.get_GPT_response(prompt,json_format=True)
+        if response["Equivalence"] == "Equivalent":
+            return True
+        else:
+            return False
 
 
 # example usage
@@ -95,5 +128,6 @@ class Evaluate_rewrite_model:
 # rewrite_query_2 = "EXPLAIN (ANALYZE, COSTS) WITH promo_revenue AS ( SELECT SUM(CASE WHEN p_type LIKE 'PROMO%' THEN l_extendedprice * (1 - l_discount) ELSE 0 END) AS promo_sum, SUM(l_extendedprice * (1 - l_discount)) AS total_sum FROM lineitem JOIN part ON l_partkey = p_partkey WHERE l_shipdate >= DATE '1995-09-01' AND l_shipdate < DATE '1995-09-01' + INTERVAL '1' MONTH) SELECT 100.00 * promo_sum / total_sum AS promo_revenue FROM promo_revenue;"
 
 # test = Evaluate_rewrite_model("./postgres.json")
+# test.evalutate(input_query, rewrite_query_1)
 # speed_up = test.evalutate(input_query, rewrite_query_1)
 # print(f"Speedup: {speed_up:.2f}")

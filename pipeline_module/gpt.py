@@ -92,12 +92,12 @@ class GPT:
         return answer
 #Example usage
 
-gpt = GPT()
-prompt = "What is the capital of France?"
+# gpt = GPT()
+# prompt = "What is the capital of France?"
 
-response = gpt.get_GPT_response(prompt,json_format=False)
-# # response = gpt.get_chat_messages(prompt)
-print(f"{response}")
+# response = gpt.get_GPT_response(prompt,json_format=False)
+# # # response = gpt.get_chat_messages(prompt)
+# print(f"{response}")
 
 
 # prompt1 = "What is the capital of France?"

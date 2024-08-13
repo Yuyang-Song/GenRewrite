@@ -1,98 +1,185 @@
 import sys
 import os
-import re
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
-
-from pipeline_module.knowledgebase import NLR2KnowledgeBase
-from pipeline_module.gpt import GPT
-
-class NLR2GroupEstimator:
-    def __init__(self, csv_path='../config_file/nlr2s.csv', knn_model_path='../config_file/knn_model.pkl', k=5):
-        self.knowledge_base = NLR2KnowledgeBase(csv_path=csv_path, knn_model_path=knn_model_path, k=k)
-        self.gpt = GPT()
-
-    def _llm_group_prediction(self, target_nlr2, candidates):
-        prompt = f"Input: {target_nlr2}\n"
-        prompt += "Please select the rewrite rule that is strictly the same as the above rule and give your explanation (just give one answer). If not, please select the first item 'Unseen rule'. Options:\n"
-        prompt += "1. Unseen rule\n"
-        for i, candidate in enumerate(candidates):
-            prompt += f"{i + 2}. {candidate}\n"
-        
-        response = self.gpt.get_GPT_response(prompt)
-        
-        for candidate in candidates:
-            if candidate in response:
-                return candidate
-        
-        return "Unseen rule"
-
-    def estimate_group(self, target_nlr2):
-        target_embedding = self.knowledge_base._embed(target_nlr2)
-        distances, indices = self.knowledge_base.find_neighbors(target_embedding)
-        
-        candidates = [self.knowledge_base.nlr2_texts[i] for i in indices[0]]
-        chosen_group = self._llm_group_prediction(target_nlr2, candidates)
-        
-        if chosen_group == "Unseen rule":
-            return "New Group"
-        else:
-            return chosen_group
-
-# Example usage
-# estimator = NLR2GroupEstimator(csv_path='nlr2s.csv', knn_model_path='knn_model.pkl', k=3)
-# estimator.knowledge_base.add_nlr2("Remove unnecessary columns from the GROUP BY clause", "Group 1")
-# estimator.knowledge_base.add_nlr2("Remove unnecessary table joins", "Group 2")
-# estimator.knowledge_base.add_nlr2("Use explicit join syntax instead of comma-separated tables in the from clause", "Group 3")
-
-# new_nlr2 = "Replace implicit joins with explicit joins"
-# group = estimator.estimate_group(new_nlr2)
-# print(f"The estimated group for the new NLR2 is: {group}")
-
-
-import math
+# 将 pipeline_module 路径添加到系统路径中
+module_path = os.path.abspath(os.path.join('..'))  # 根据实际路径调整
+if module_path not in sys.path:
+    sys.path.append(module_path)
+import textwrap
+from transformers import BertModel, BertTokenizer
+from sklearn.metrics.pairwise import euclidean_distances
+import numpy as np
 from collections import defaultdict
+from pipeline_module.gpt import GPT
+import json
 
-class NLR2BenefitEstimator:
-    def __init__(self):
-        self.query_rewrites = defaultdict(list)  # 存储查询及其重写规则的性能提升
-        self.group_benefits = defaultdict(list)  # 存储每个组的规则性能提升
+# BERT Embedding Model
+class sugget_group_rewrite:
+    def __init__(self,path,k=3):
+        self.gpt = GPT()
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.model = BertModel.from_pretrained('bert-base-uncased')
+        self.load_rewrite_rules = []
+        self.hash = {}  # 初始化一个字典来保存rewrite_rule到group_id的映射
+        self.path = path
+        self.embeddings = None
+        self.k = k
 
-    def add_rewrite(self, query, rewritten_query, group, speedup):
-        """
-        添加一个重写规则及其性能提升。
-        """
-        self.query_rewrites[query].append((rewritten_query, group, speedup))
-        self.group_benefits[group].append(speedup)
+    def embed(self, text):
+        inputs = self.tokenizer(text, return_tensors='pt', truncation=True, padding=True)
+        outputs = self.model(**inputs)
+        return outputs.last_hidden_state.mean(dim=1).detach().numpy()
+    
+    def load_json(self):
+        with open(self.path, 'r') as file:
+            json_data = json.load(file)
 
-    def geometric_mean(self, nums):
-        """
-        计算几何平均值。
-        """
-        product = math.prod(nums)
-        return product ** (1.0 / len(nums))
+        for key, value in json_data.items():
+            if key.startswith("rules_"):
+                for rule in value:
+                    rewrite_rule = rule.get("rewrite_rule")
+                    group_id = rule.get("group_id")
+                    if rewrite_rule:
+                        self.load_rewrite_rules.append(rewrite_rule)
+                        if group_id:
+                            self.hash[rewrite_rule] = group_id  # 将rewrite_rule与group_id关联
+        
+        # 在加载 rewrite rules 后预计算它们的嵌入向量
+        self.embeddings = np.vstack([self.embed(rule) for rule in self.load_rewrite_rules])
+        # return self.embeddings
 
-    def estimate_group_benefit(self, group):
-        """
-        估算一个组的总体效益评分。
-        """
-        if group not in self.group_benefits or not self.group_benefits[group]:
-            return 0
-        return self.geometric_mean(self.group_benefits[group])
+    def knn(self, input_sentence):
+        # 对输入句子进行编码
+        input_embedding = self.embed(input_sentence)
+        
+        # 计算欧氏距离
+        distances = euclidean_distances(input_embedding, self.embeddings)[0]
+        
+        # 获取距离最近的句子的索引，按照距离从小到大排序
+        sorted_indices = np.argsort(distances)
+        
+        top_k_sentences = []
+        seen_groups = set()
+        
+        # 遍历排序后的索引，选择属于不同group_id的句子
+        for index in sorted_indices:
+            rule = self.load_rewrite_rules[index]
+            group_id = self.hash.get(rule)
+            
+            if group_id not in seen_groups:
+                top_k_sentences.append(rule)
+                seen_groups.add(group_id)
+            
+            # 当找到的句子数量达到k时停止
+            if len(top_k_sentences) >= self.k:
+                break
+        
+        return top_k_sentences
 
-    def estimate_all_group_benefits(self):
-        """
-        估算所有组的总体效益评分。
-        """
-        return {group: self.estimate_group_benefit(group) for group in self.group_benefits}
+    
+    def predict_group(self, input_query, candidates):
+        options = "1. Unseen rule\n"
+        for i, candidate in enumerate(candidates, start=2):
+            options += f"{i}. {candidate}\n"
+        
+        prompt = textwrap.dedent(f"""
+            <description>
+            {input_query}
+            Please select the rewrite rule that is strictly the same as the above rule and give your explanation (just give one answer). 
+            If not, please select the first item “Unseen rule”.
+            <Options>
+            {options}
 
-# 示例用法
-# estimator = NLR2BenefitEstimator()
-# estimator.add_rewrite("SELECT * FROM table1", "SELECT * FROM table1 WHERE id > 10", "Group 1", 5.0)
-# estimator.add_rewrite("SELECT * FROM table1", "SELECT * FROM table1 JOIN table2 ON table1.id = table2.id", "Group 1", 10.0)
-# estimator.add_rewrite("SELECT * FROM table1", "SELECT id, name FROM table1", "Group 2", 2.0)
+            <demand>
+            JSON RESULT TEMPLATE:
+            {{
+                "option": , // the selected option(use the content of option, do not use the index
+                "Explanation": ,      // give the Explanation of the selected option
+            }}
+            """
+            
+        )
+        response = self.gpt.get_GPT_response(prompt,json_format=True)
+        return response
+    
+        # 用于添加新的规则到JSON文件中
+    def add_rule_to_json(self, group_id, rewrite_rule, query):
+        # 读取 JSON 文件
+        with open(self.path, 'r') as file:
+            json_data = json.load(file)
+        
+        # 检查并初始化 rule_number
+        rule_number = json_data['group_info'].get('rule_number')
+        if rule_number is None:
+            rule_number = 0
+        
+        # 检查并初始化 group_number
+        group_number = json_data['group_info'].get('group_number')
+        if group_number is None:
+            group_number = 0
+        
+        # 更新group_info规则信息
+        rule_number += 1
+        json_data['group_info']['rule_number'] = rule_number
+        
+        json_data[f'rules_{rule_number}'] = []
+        
+        # 创建新的规则条目
+        new_rule = {
+            "rule_id": rule_number,
+            "group_id": group_id,
+            "rewrite_rule": rewrite_rule,
+            "query_list": {
+                "query_number": 1,
+                "query_1": {
+                    "id": 1,
+                    "query": query
+                }
+            }
+        }
+        # 如果需要添加新组
+        if int(group_id) > int(group_number):
+            # 更新group_info的信息
+            group_number += 1
+            json_data['group_info']['group_number'] = group_number
+            
+        # 将新规则添加到 'rules' 列表中
+        json_data[f'rules_{rule_number}'].append(new_rule)
 
-# group_benefits = estimator.estimate_all_group_benefits()
-# print(group_benefits)
+        # 写回 JSON 文件
+        with open(self.path, 'w') as file:
+            json.dump(json_data, file, indent=3)
+
+        print(f"Added rule with group_id: {group_id}: {rewrite_rule} to {self.path}")
+
+
+# 示例使用
+reportory_path = "../data/reportory.json"
+embedding_model = sugget_group_rewrite(reportory_path,k = 3)
+input_sentence = "SELECT * FROM table1 WHERE condition1."
+top_k_sentences = embedding_model.knn(input_sentence)
+
+# reportory_path = "../data/reportory.json"
+# embedding_model = sugget_group_rewrite(reportory_path,k = 3)
+# embedding_model.load_json()
+
+# input_sentence = "SELECT * FROM table1 WHERE condition1."
+# top_k_sentences = embedding_model.knn(input_sentence)
+
+# print("Top-K most similar sentences:")
+# for sentence in top_k_sentences:
+#     print(sentence)
+
+
+# response = embedding_model.predict_group(input_sentence, top_k_sentences)['option']
+# # print(response)
+# # 打印hash字典
+# # print("Rewrite Rule to Group ID mapping:")
+# # for rule, group_id in embedding_model.hash.items():
+# #     print(f"Rule: {rule}, Group ID: {group_id}")
+    
+# group_id = embedding_model.hash.get(response)
+# print(group_id)
+
+# embedding_model.add_rule_to_json(group_id,input_sentence,"This is a test query.")
+

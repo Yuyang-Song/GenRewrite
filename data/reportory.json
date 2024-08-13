@@ -1,0 +1,76 @@
+{
+   "group_info": {
+      "group_number": 4,
+      "rule_number": 4
+   },
+   "rule": [
+      {
+         "rule_id": null,
+         "group_id": null,
+         "rewrite_rule": null,
+         "query_list": {
+            "query_number": null,
+            "query": {
+               "id": null,
+               "query": null
+            }
+         }
+      }
+   ],
+   "rules_1": [
+      {
+         "rule_id": 1,
+         "group_id": "1",
+         "rewrite_rule": "SELECT * FROM table1 WHERE condition1",
+         "query_list": {
+            "query_number": 1,
+            "query_1": {
+               "id": 1,
+               "query": "IMPORVE SELECT * FROM table1 WHERE condition1"
+            }
+         }
+      }
+   ],
+   "rules_2": [
+      {
+         "rule_id": 2,
+         "group_id": "2",
+         "rewrite_rule": "SELECT * FROM table2 WHERE condition2",
+         "query_list": {
+            "query_number": 1,
+            "query_1": {
+               "id": 1,
+               "query": "IMPORVE SELECT * FROM table2 WHERE condition2"
+            }
+         }
+      }
+   ],
+   "rules_3": [
+      {
+         "rule_id": 3,
+         "group_id": "3",
+         "rewrite_rule": "SELECT * FROM table3 WHERE condition3",
+         "query_list": {
+            "query_number": 1,
+            "query_1": {
+               "id": 1,
+               "query": "IMPORVE SELECT * FROM table3 WHERE condition3"
+            }
+         }
+      }
+   ],
+   "rules_4": [
+      {
+         "rule_id": 4,
+         "group_id": "4",
+         "rewrite_rule": "SELECT * FROM table1 WHERE condition4.",
+         "query_list": {
+            "query_number": 1,
+            "query_1": {
+               "id": 1,
+               "query": "This is a test query."
+            }
+         }
+      }
+   ]
+}

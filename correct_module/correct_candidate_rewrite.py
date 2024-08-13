@@ -6,7 +6,8 @@
 import sys
 import os
 import re
-
+import textwrap
+import json
 # Obtain the current directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -24,73 +25,80 @@ class Nlr2Correction:
         self.q1 = q1
         self.q2 = q2
         self.gpt = GPT()
-        
-    def extract_modified_version(self,prompt):
-        # defination of regular match pattern of sql queries
-        sql_pattern = re.compile(
-            r"```sql(.*?)```|"
-            r"\*\*Modified version:\*\*\s*```sql(.*?)```|"
-            r"\*\*Modified version:\*\*\s*(.*?)(?=(\n\*\*|$))",
-            re.DOTALL
-        )
-        # searching for mathch patterns in prompt
-        match = sql_pattern.search(prompt)
-        
-        if match:
-            # return the matched SQL queries
-            return match.group(1) or match.group(2) or match.group(3)
-        else:
-            return None
     
     def perform_semantic_correction(self):
-        prompt = (
-            f"q1:{self.q1} q2:{self.q2}\n"
-            f"q1 is the original query, q2 is the rewritten query of q1.\n"
-            "For q1, break it down step by step and then describe what it does in one sentence. Do the same for q2.\n"
-            "Give an example, using tables, to show that these two queries are not equivalent if there's any such case. Otherwise, just say they are equivalent.\n"
-            "please return the answer in the following format:\n"
-            "Not equivalent(or equivalent).\n" 
-            "{Breakdown and analysis} \n"
-            "{A counterexample} \n"
-        )
-        analysis = self.gpt.get_GPT_response(prompt)
-        #### print(analysis)
-
-        # Assume the GPT response includes both q1_analysis and q2_analysis
-        if "Not equivalent" in analysis:
-            prompt_improve = (
-            "Based on your analysis, which part of q2 should be modified so that it becomes equivalent to q1? Show the modified version of q2.\n"
-            "please return the answer in the following format and note that do not add any other word after modified version query:\n"
-            "{analysis this problem} \n" 
-            "{Modified version:} \n"
+        prompt = textwrap.dedent(
+        f"""
+            <description>
+            q1:{self.q1} q2:{self.q2}
+            q1 is the original query, q2 is the rewritten query of q1.
             
+            <target>
+            For q1, break it down step by step and then describe what it does in one sentence. Do the same for q2.
+            Give an example, using tables, to show that these two queries are not equivalent if there's any such case. Otherwise, just say they are equivalent.
+            
+            <demant>
+            JSON RESULT TEMPLATE:
+            {{
+                "Equivalence": , // answer Equivalent or Not Equivalent
+                "Break down and analysis": ,      // show wheather the two queries are equivalent or not
+                "Counterexample":        // if the two queries are not equivalent, show the counterexample, else show "null"
+            }}
+        """
         )
-            self.q2 = self.gpt.get_GPT_response_with_history(prompt,prompt_improve,analysis)
-            #### print(self.q2)
-            self.q2 = self.extract_modified_version(self.q2)
-        #     self.q2 = self.gpt.get_GPT_response(prompt)
-        #     print(f"correct CoT correction : {self.q2}\n")
         
+        analysis = self.gpt.get_GPT_response(prompt,json_format = True)
+        # analysis_dict = json.loads(analysis)
+        flag = analysis["Equivalence"]
+        # print(flag)
+        # eturn analysis
+        #### print(analysis)
+        # # Assume the GPT response includes both q1_analysis and q2_analysis
+        
+        if flag == "Not Equivalent":
+            print("Not Equivalent")
+            
+            prompt_improve = textwrap.dedent(f"""
+                <target>
+                Based on your analysis, which part of q2 should be modified so that it becomes equivalent to q1? Show the modified version of q2.
+                
+                <demand>
+                JSON RESULT TEMPLATE:
+                {{
+                "Analysis": , // step by step analysis
+                "Modified version": ,      // show the modified version of q2
+                }}
+        """    
+        )
+            cot_analysis = self.gpt.get_GPT_response_with_history(prompt,prompt_improve,analysis)
+            self.q2 = cot_analysis["Modified version"]
             print(
-                f"Not Equivalent\n"
-                f"CoT correction based on semantic correction: {self.q2}"
+                f"CoT correction based on semantic correction: {self.q2}\n"
             )
             return False  # Not equivalent yet
-        print(
-            f"Equivalent\n"
-            f"Origin query: {self.q2}"
-        )
-        
-        return True  # Equivalent
+        else:
+            print(
+                f"Equivalent"
+                f"Origin query: {self.q2}\n"
+            )
+            
+            return True  # Equivalent
 
     def perform_syntax_correction(self):
         # Perform syntax correction based on feedback from EXPLAIN command using GPT
-        prompt = (
-            f"Perform syntax correction for the following SQL query:\n{self.q2}\n Is this query has any syntax error? If it hasn't, return the origin query. If it has, return the corrected query."
-            "please return the answer in the following format and note that do not add any other word after sql format query:\n"
-            "```sql {return query}```\n" 
+        prompt = textwrap.dedent(f"""
+            <target>                    
+            Perform syntax correction for the following SQL query:\n{self.q2}\n Is this query has any syntax error? If it hasn't, return the origin query. If it has, return the corrected query.
+            
+            <demand>
+            JSON RESULT TEMPLATE:
+            {{
+                "Analysis": , // brief analysis
+                "return query": ,      // return the non error query
+            }}
+        """
         )
-        return self.gpt.get_GPT_response(prompt)
+        return self.gpt.get_GPT_response(prompt,json_format = True)
 
     def correct_query(self):
         iterations = 0
@@ -101,12 +109,13 @@ class Nlr2Correction:
         )
         while not self.perform_semantic_correction():
             iterations += 1
-            if iterations > 3:  # Avoid infinite loops
+            if iterations > 4:  # Avoid infinite loops
                 return None
-        self.q2 = self.perform_syntax_correction()
-        self.q2 = self.extract_modified_version(self.q2)
+            
+        print("running syntax correction............\n")
+        correct_answer = self.perform_syntax_correction()
+        self.q2 = correct_answer["return query"]
         print(
-            f"running syntax correction............\n"
             f"CoT correction  based on syntax correction: {self.q2}"
             f"-----------------------------------------------------------------\n"
         )

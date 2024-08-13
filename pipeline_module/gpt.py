@@ -25,13 +25,8 @@ class GPT:
     def __init__(self):
         self.base_url = "https://one.aios123.com/v1"
         self.api_key = "sk-LR70O3o5qf5L9fIo62Da419a4bEd461bA7AcA3D3056a2310"
+        # self.model = "gpt-4o-mini"
         self.model = "gpt-4o-mini"
-        # self.api_key = "sk-Xmt8rI8NLSc9MUrm17C59c605b994f50Ab26Eb1d4f609423"
-        # self.api_base = "https://api.f2gpt.com"
-        # self.api_key = "sk-f2gpDc6IFUciFwkNfCJW6tNVyf45ef9RdkidGRXFZF6mnySj"
-        # self.api_base = "https://api.openai.com/v1/"
-        # self.api_key =  "sk-tMMrovQDfvGjWQIG5d6a4a2b3bEb4e3f919a578964Cf9319"
-        
 
     def get_GPT_response(self, prompt,json_format = False):
         client = OpenAI(
@@ -97,11 +92,11 @@ class GPT:
         return answer
 #Example usage
 
-# gpt = GPT()
-# prompt = "What is the capital of France?"
+gpt = GPT()
+prompt = "What is the capital of France?"
 
-# response = gpt.get_GPT_response(prompt,json_format=True)
-# print(f"{response}")
+response = gpt.get_GPT_response(prompt,json_format=True)
+print(f"{response}")
 
 
 # prompt1 = "What is the capital of France?"

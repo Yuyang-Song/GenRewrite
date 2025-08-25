@@ -1,4 +1,4 @@
-an unofficial implementation of paper "Query Rewriting via Large Language Models"
+An unofficial implementation of paper "Query Rewriting via Large Language Models"
 
 1. pip install -r requirement.txt
 2. please download longformer in huggenface to enable the embedding moodule.(using download.py in prepare file)

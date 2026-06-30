@@ -17,7 +17,7 @@ if __name__ == "__main__":
         prompt = "What is the capital of France?"
         response = gpt.get_GPT_response(prompt)
         print(f"  {response}\n")
-        print("GPT connection sucessfully!")
+        print("GPT connection successfully!")
         
     except Exception as e:
         logging.error(f"An error occurred: {e}", exc_info=True)
